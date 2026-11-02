@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GeekRank 极客避坑天梯榜</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<style>
+:root{color-scheme:dark;--bg:#0D0D0D;--card:#161616;--or:#FF6B00;--gr:#3FB950;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{background:var(--bg);color:#e6e6e6;font-family:ui-monospace,"SF Mono",Menlo,Consolas,"PingFang SC","Microsoft YaHei",monospace}
+.card{background:var(--card);border:1px solid #262626;border-radius:14px}
+.row{position:absolute;left:0;right:0;height:104px;transition:transform .7s cubic-bezier(.22,1,.36,1),opacity .4s}
+.fill{transition:width .8s cubic-bezier(.22,1,.36,1);background:linear-gradient(90deg,#b34700,#FF6B00);box-shadow:0 0 12px #FF6B0088}
+.chip{border:1px solid #333;border-radius:999px;padding:6px 14px;font-size:13px;transition:.2s}
+.chip.on{background:var(--or);border-color:var(--or);color:#000;font-weight:700}
+.tab{flex:1;padding:10px 4px;font-size:13px;border-bottom:2px solid transparent;color:#888}
+.tab.on{color:var(--or);border-color:var(--or)}
+</style>
+</head>
+<body>
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <header class="text-center mb-6">
+    <h1 class="text-3xl sm:text-5xl font-black tracking-tight" style="color:var(--or);text-shadow:0 0 24px #FF6B0066">GeekRank 极客天梯榜</h1>
+    <p class="mt-2 text-sm sm:text-base text-gray-400">用价格倒逼参数，由真车主撕开虚假宣传</p>
+  </header>
+
+  <section class="card p-4 mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+    <input id="q" type="search" placeholder="搜索手机名、品牌或芯片…" class="flex-1 min-w-0 bg-black border border-neutral-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-500">
+    <div id="cats" class="flex flex-wrap gap-2">
+      <button class="chip on" data-c="">全部</button>
+      <button class="chip" data-c="顶级旗舰">顶级旗舰</button>
+      <button class="chip" data-c="次旗舰">次旗舰</button>
+      <button class="chip" data-c="中端主流">中端主流</button>
+    </div>
+    <button id="jit" class="chip" style="border-color:var(--or);color:var(--or)">⚡ 模拟价格波动</button>
+  </section>
+
+  <main class="grid gap-5 lg:grid-cols-2">
+    <section class="card p-4">
+      <h2 class="font-bold mb-1">性价比天梯 <span class="text-xs text-gray-500">得分 = 基础分 × 1000 ÷ 动态价格</span></h2>
+      <div id="empty" class="hidden text-center text-gray-500 py-10 text-sm">该分类下暂无数据</div>
+      <div id="ladder" class="relative mt-3"></div>
+    </section>
+
+    <section class="card flex flex-col overflow-hidden" style="min-height:460px">
+      <div class="flex border-b border-neutral-800">
+        <button class="tab on" data-t="chat">极客聊天室（自由讨论，无门槛）</button>
+        <button class="tab" data-t="club">车主俱乐部（真机心得）</button>
+      </div>
+      <div id="clubbar" class="hidden px-4 pt-3 text-xs text-gray-400">
+        发言机型：<select id="sel" class="bg-black border border-neutral-700 rounded px-2 py-1 ml-1"></select>
+      </div>
+      <div id="msgs" class="flex-1 overflow-y-auto p-4 space-y-3 text-sm" style="max-height:340px"></div>
+      <div id="warn" class="hidden mx-4 mb-2 text-xs rounded px-3 py-2" style="background:#3a1500;color:#ff9d5c"></div>
+      <div class="p-4 pt-0 flex gap-2">
+        <input id="in" class="flex-1 min-w-0 bg-black border border-neutral-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-500" placeholder="说点什么…">
+        <button id="send" class="rounded-lg px-4 text-sm font-bold text-black" style="background:var(--or)">发送</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script type="module">
+const ROW = 104;
+const FALLBACK = [
+  {name:"Xiaomi Poco F9 Ultra", brand:"Xiaomi", cat:"顶级旗舰", price:6100, chip:"骁龙8 Elite Gen 5", base:97.5, url:"https://gsmarena.com", ua:/POCO ?F9|Xiaomi/i},
+  {name:"REDMI K100 Pro Max", brand:"Redmi", cat:"中端主流", price:3999, chip:"骁龙8至尊版", base:94.2, url:"https://www.gsmarena.com", ua:/K100|Redmi/i},
+  {name:"OPPO Reno 14 Pro", brand:"OPPO", cat:"中端主流", price:3999, chip:"天玑8300", base:78.0, url:"https://www.gsmarena.com", ua:/Reno ?14|CPH|OPPO/i}
+];
+let phones = FALLBACK;
+try {
+  const r = await fetch("data.json", {cache:"no-store"});
+  if (r.ok) { const j = await r.json(); phones = j.phones.map(p => ({...p, ua:new RegExp(p.ua,"i")})); }
+} catch (e) {}
+phones.forEach(p => p.p0 = p.prev_price || p.price);
+const $ = s => document.querySelector(s);
+let cat = "", kw = "", tab = "chat";
+
+const ladder = $("#ladder");
+phones.forEach(p => {
+  const d = document.createElement("div");
+  d.className = "row";
+  d.innerHTML = `<div class="flex items-baseline justify-between gap-2"><span class="rk font-black text-lg" style="color:var(--or)"></span><span class="nm font-bold text-sm truncate flex-1"></span><span class="pr text-xs text-gray-400"></span></div>
+  <div class="text-xs text-gray-500 mt-0.5 ch"></div>
+  <div class="mt-2 h-5 rounded bg-neutral-900 overflow-hidden relative"><div class="fill h-full rounded" style="width:0"></div><span class="sc absolute right-2 top-0 text-xs leading-5 font-bold"></span></div>
+  <a class="inline-block mt-2 text-xs underline" style="color:var(--or)" target="_blank" rel="noopener noreferrer">🔗 查看GSMArena原始数据</a>`;
+  d.querySelector("a").href = p.url;
+  p.el = d; ladder.appendChild(d);
+});
+
+const score = p => p.base * 1000 / p.price;
+
+function render() {
+  const vis = phones.filter(p =>
+    (!cat || p.cat === cat) &&
+    (p.name + p.brand + p.chip).toLowerCase().includes(kw.toLowerCase())
+  ).sort((a, b) => score(b) - score(a));
+  const max = vis.length ? score(vis[0]) : 1;
+  ladder.style.height = vis.length * ROW + "px";
+  $("#empty").classList.toggle("hidden", vis.length > 0);
+  phones.forEach(p => {
+    const i = vis.indexOf(p), e = p.el;
+    if (i < 0) {
+      e.style.opacity = 0; e.style.pointerEvents = "none";
+      e.style.transform = `translateY(${vis.length * ROW}px)`;
+      return;
+    }
+    e.style.opacity = 1; e.style.pointerEvents = "auto";
+    e.style.transform = `translateY(${i * ROW}px)`;
+    e.querySelector(".rk").textContent = "#" + (i + 1);
+    e.querySelector(".nm").textContent = p.name;
+    e.querySelector(".pr").textContent = "¥" + p.price + (p.price !== p.p0 ? (p.price < p.p0 ? " ↓" : " ↑") : "");
+    e.querySelector(".ch").textContent = `${p.cat} · ${p.chip} · 基础分 ${p.base}${p.battery ? " · " + p.battery : ""}${p.refresh ? " · " + p.refresh : ""}`;
+    e.querySelector(".fill").style.width = (score(p) / max * 100) + "%";
+    e.querySelector(".sc").textContent = score(p).toFixed(2);
+  });
+}
+
+$("#q").addEventListener("input", e => { kw = e.target.value.trim(); render(); });
+$("#cats").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  document.querySelectorAll("#cats .chip").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); cat = b.dataset.c; render();
+});
+$("#jit").addEventListener("click", () => {
+  phones.forEach(p => { p.price = Math.round(p.p0 * (0.8 + Math.random() * 0.45) / 10) * 10; });
+  render();
+});
+
+/* 评论区 */
+const store = {
+  chat: [
+    {u:"芯片考古学家", t:"天玑8300放在3999，只能说定价很勇。", own:false},
+    {u:"跑分战神", t:"别只看跑分，持续性能才是真相。", own:false}
+  ],
+  club: [
+    {u:"K100真车主", t:"连续玩原神一小时，机身温度 41℃，没掉帧。", own:true, m:"REDMI K100 Pro Max"}
+  ]
+};
+const sel = $("#sel");
+phones.forEach(p => sel.add(new Option(p.name, p.name)));
+
+function esc(s){ return s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function draw() {
+  $("#msgs").innerHTML = store[tab].map(m => `<div class="rounded-lg bg-black/40 p-3">
+    <div class="flex items-center gap-2 text-xs mb-1"><b>${esc(m.u)}</b>${m.own ? `<span class="px-1.5 rounded text-black font-bold" style="background:var(--gr)">✔ 车主认证 · ${esc(m.m)}</span>` : ""}</div>
+    <div class="text-gray-300">${esc(m.t)}</div></div>`).join("");
+  $("#msgs").scrollTop = 1e6;
+}
+function warn(t) {
+  const w = $("#warn"); w.textContent = t; w.classList.remove("hidden");
+  clearTimeout(warn.t); warn.t = setTimeout(() => w.classList.add("hidden"), 4000);
+}
+document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); tab = b.dataset.t;
+  $("#clubbar").classList.toggle("hidden", tab !== "club");
+  $("#warn").classList.add("hidden"); draw();
+}));
+function send() {
+  const v = $("#in").value.trim(); if (!v) return;
+  if (tab === "club") {
+    const p = phones.find(x => x.name === sel.value);
+    if (!p.ua.test(navigator.userAgent)) {
+      warn(`⛔ 已拦截：未检测到 ${p.name} 真机环境，请使用该机型访问后再发表心得。`);
+      return;
+    }
+    store.club.push({u:"我", t:v, own:true, m:p.name});
+  } else {
+    store.chat.push({u:"匿名极客", t:v, own:false});
+  }
+  $("#in").value = ""; draw();
+}
+$("#send").addEventListener("click", send);
+$("#in").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+
+render(); draw();
+</script>
+</body>
+</html>

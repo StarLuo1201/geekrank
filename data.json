@@ -1,0 +1,9 @@
+{
+  "updated_at": "",
+  "phones": [
+    {"name":"Xiaomi Poco F9 Ultra","brand":"Xiaomi","cat":"顶级旗舰","price":6100,"chip":"骁龙8 Elite Gen 5","base":97.5,"url":"https://gsmarena.com","gsm_url":"","ua":"POCO ?F9|Xiaomi","battery":"","refresh":""},
+    {"name":"REDMI K100 Pro Max","brand":"Redmi","cat":"中端主流","price":3999,"chip":"骁龙8至尊版","base":94.2,"url":"https://www.gsmarena.com","gsm_url":"","ua":"K100|Redmi","battery":"","refresh":""},
+    {"name":"OPPO Reno 14 Pro","brand":"OPPO","cat":"中端主流","price":3999,"chip":"天玑8300","base":78.0,"url":"https://www.gsmarena.com","gsm_url":"","ua":"Reno ?14|CPH|OPPO","battery":"","refresh":""}
+  ],
+  "pending": []
+}
